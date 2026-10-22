@@ -1,4 +1,3 @@
-
 const mongoose = require('mongoose');
 
 const PatientSchema = new mongoose.Schema(
@@ -12,17 +11,18 @@ const PatientSchema = new mongoose.Schema(
 
         dateOfBirth: {
             type: Date,
-            required: true
+            required: true,
+            validate: {
+                validator: function (value) {
+                    return value <= new Date();
+                },
+                message: 'Date of birth cannot be in the future'
+            }
         },
 
         gender: {
             type: String,
-            enum: [
-                'female',
-                'male',
-                'other',
-                'prefer_not_to_say'
-            ],
+            enum: ['female', 'male', 'other', 'prefer_not_to_say'],
             required: true
         }
     },
