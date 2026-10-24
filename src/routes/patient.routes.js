@@ -1,11 +1,16 @@
 const express = require('express');
 const authenticate = require('../middlewares/auth.middleware');
-const { createPatientProfile, getPatientProfile, updatePatientProfile } = require('../controllers/patient.controller');
+const { registerPatientIntake, getPatientProfile, updatePatientProfile } = require('../controllers/patient.controller');
 
 const router = express.Router();
 
-router.post('/profile', authenticate, createPatientProfile);
+// PHC worker registers a patient and assigns a doctor
+router.post('/intake', authenticate, registerPatientIntake);
+
+// Patient views their own profile
 router.get('/profile', authenticate, getPatientProfile);
-router.patch('/profile', authenticate, updatePatientProfile);
+
+// Worker updates a patient's profile
+router.patch('/:patientId/profile', authenticate, updatePatientProfile);
 
 module.exports = router;

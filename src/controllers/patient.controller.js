@@ -1,50 +1,135 @@
+const mongoose = require('mongoose');
 const calculateAge = require('../utils/calculateAge');
 const PatientModel = require('../models/patient.model');
 const UserModel = require('../models/user.model');
+const FacilityModel = require('../models/facility.model');
 
 
-
-const createPatientProfile = async (req, res, next) => {
+const registerPatientIntake = async (req, res, next) => {
     try {
-        // Confirm the logged-in user exists and is a patient
-        const user = await UserModel.findById(req.user.userId);
+        // Confirm the logged-in user is an active PHC worker.
+        const worker = await UserModel.findById(req.user.userId);
 
-        if (!user || !user.isActive) {
-            return res.status(401).json({
-                message: 'Account unavailable'
-            });
-        }
-
-        if (user.role !== 'patient') {
+        if (!worker || !worker.isActive ||  worker.accountStatus !== 'active') {
             return res.status(403).json({
-                message: 'Only patients can create a patient profile'
+                message: 'Worker account is not active'
             });
         }
 
-        // Check whether a profile already exists
-        const existingProfile = await PatientModel.findOne({
-            userId: user._id
+        if (worker.role !== 'worker') {
+            return res.status(403).json({
+                message: 'Only PHC workers can register patients'
+            });
+        }
+
+        if (!worker.facilityId) {
+            return res.status(400).json({
+                message: 'Your account is not linked to a facility'
+            });
+        }
+
+        const facility = await FacilityModel.findOne({
+            _id: worker.facilityId,
+            isActive: true
         });
 
-        if (existingProfile) {
-            return res.status(409).json({
-                message: 'Patient profile already exists'
+        if (!facility) {
+            return res.status(400).json({
+                message: 'Your facility is unavailable'
             });
         }
 
-        // Create the profile using the authenticated user's ID
+        const { fullName, dateOfBirth, gender, reasonForVisit, assignedDoctorId } = req.body;
+
+        if (
+            typeof fullName !== 'string' ||
+            fullName.trim().length < 2
+        ) {
+            return res.status(400).json({
+                message: 'Please provide the patient full name'
+            });
+        }
+
+        if (
+            typeof reasonForVisit !== 'string' ||
+            reasonForVisit.trim().length < 3
+        ) {
+            return res.status(400).json({
+                message: 'Please provide the reason for visit'
+            });
+        }
+
+        const dob = new Date(dateOfBirth);
+
+        if (
+            typeof dateOfBirth !== 'string' ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) ||
+            Number.isNaN(dob.getTime()) ||
+            dob.toISOString().slice(0, 10) !== dateOfBirth ||
+            dob > new Date()
+        ) {
+            return res.status(400).json({
+                message: 'Please provide a valid date of birth'
+            });
+        }
+
+        const allowedGenders = [
+            'female',
+            'male',
+            'other',
+            'prefer_not_to_say'
+        ];
+
+        if (!allowedGenders.includes(gender)) {
+            return res.status(400).json({
+                message: 'Please provide a valid gender'
+            });
+        }
+
+        // Find an active doctor assigned to the same facility.
+        if (!mongoose.isValidObjectId(assignedDoctorId)) {
+            return res.status(400).json({
+                message: 'Please select a valid doctor'
+            });
+        }
+
+        const doctor = await UserModel.findOne({
+            _id: assignedDoctorId,
+            role: 'doctor',
+            isActive: true,
+            accountStatus: 'active',
+            facilityId: worker.facilityId
+        });
+
+        if (!doctor) {
+            return res.status(400).json({
+                message: 'Doctor not found, inactive, or not assigned to your facility'
+            });
+        }
+
         const patient = await PatientModel.create({
-            userId: user._id,
-            dateOfBirth: req.body.dateOfBirth,
-            gender: req.body.gender
+            fullName: fullName.trim(),
+            dateOfBirth: dob,
+            gender,
+            reasonForVisit: reasonForVisit.trim(),
+            userId: null,
+            facilityId: worker.facilityId,
+            registeredBy: worker._id,
+            assignedDoctorId: doctor._id
         });
 
         return res.status(201).json({
-            message: 'Patient profile created successfully',
+            message: 'Patient registered and assigned to a doctor successfully',
             patient: {
-                userId: user._id,
-                dateOfBirth: patient.dateOfBirth.toISOString().split('T')[0], // Format date as YYYY-MM-DD
-                gender: patient.gender
+                _id: patient._id,
+                fullName: patient.fullName,
+                dateOfBirth: patient.dateOfBirth.toISOString().slice(0, 10),
+                age: calculateAge(patient.dateOfBirth),
+                gender: patient.gender,
+                reasonForVisit: patient.reasonForVisit,
+                facilityId: patient.facilityId,
+                registeredBy: patient.registeredBy,
+                assignedDoctorId: patient.assignedDoctorId
             }
         });
     } catch (error) {
@@ -55,10 +140,18 @@ const createPatientProfile = async (req, res, next) => {
 
 const getPatientProfile = async (req, res, next) => {
     try {
-        // Find the profile belonging to the logged-in user
+        // Only patients can view their own profiles.
+        if (req.user.role !== 'patient') {
+            return res.status(403).json({
+                message: 'Only patients can view their own profile'
+            });
+        }
+
+        // Find the profile linked to the logged-in patient.
         const patient = await PatientModel.findOne({
             userId: req.user.userId
         });
+
 
         if (!patient) {
             return res.status(404).json({
@@ -75,17 +168,24 @@ const getPatientProfile = async (req, res, next) => {
             });
         }
 
+        // Find the facility and assigned doctor.
+        const facility = patient.facilityId ? await FacilityModel.findById(patient.facilityId) : null;
+
+        const doctor = patient.assignedDoctorId ? await UserModel.findById(patient.assignedDoctorId) : null;
+
+        
         return res.status(200).json({
             patient: {
                 userId: user._id,
                 fullName: user.fullName,
-                dateOfBirth: patient.dateOfBirth
-                    .toISOString()
-                    .split('T')[0],
-                age: calculateAge(patient.dateOfBirth),
-                gender: patient.gender
+                dateOfBirth: patient.dateOfBirth ? patient.dateOfBirth.toISOString().split('T')[0] : null,
+                age: patient.dateOfBirth ? calculateAge(patient.dateOfBirth) : null,
+                gender: patient.gender ?? null,
+                facility: facility ? { name: facility.name } : null,
+                assignedDoctor: doctor ? { fullName: doctor.fullName } : null
             }
         });
+
     } catch (error) {
         next(error);
     }
@@ -163,16 +263,22 @@ const updatePatientProfile = async (req, res, next) => {
         // Fetch the user's name from the User collection.
         const user = await UserModel.findById(req.user.userId);
 
+        
         return res.status(200).json({
             message: 'Patient profile updated successfully',
             patient: {
                 userId: user._id,
                 fullName: user.fullName,
-                dateOfBirth: patient.dateOfBirth.toISOString().slice(0, 10),
-                age: calculateAge(patient.dateOfBirth),
-                gender: patient.gender
+                dateOfBirth: patient.dateOfBirth
+                    ? patient.dateOfBirth.toISOString().split('T')[0]
+                    : null,
+                age: patient.dateOfBirth
+                    ? calculateAge(patient.dateOfBirth)
+                    : null,
+                gender: patient.gender ?? null
             }
         });
+
     } catch (error) {
         next(error);
     }
@@ -180,7 +286,7 @@ const updatePatientProfile = async (req, res, next) => {
 
 
 module.exports = {
-    createPatientProfile,
     getPatientProfile,
-    updatePatientProfile
+    updatePatientProfile,
+    registerPatientIntake
 };

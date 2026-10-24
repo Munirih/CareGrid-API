@@ -50,7 +50,7 @@ const UserSchema = mongoose.Schema({
     accountStatus: {
         type: String,
         enum: [ 'pending', 'active', 'rejected' ],
-        default: 'pending',
+        default: 'active',
         required: true
         },
 },

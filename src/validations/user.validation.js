@@ -6,6 +6,7 @@ const registerValidationSchema = Joi.object({
     phoneNumber: Joi.string().required().trim().pattern(/^\+?[0-9]{7,15}$/),
     password: Joi.string().required().min(6).max(100),
     role: Joi.string().valid('patient', 'doctor', 'worker').required(),
+    facilityId: Joi.string().hex().length(24).optional()
 });
 
 const loginValidationSchema = Joi.object({
