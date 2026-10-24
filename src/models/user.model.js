@@ -35,14 +35,21 @@ const UserSchema = mongoose.Schema({
         enum: ['patient', 'doctor', 'worker'],
         required: true,
     },
-    
+
+    facilityId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Facility',
+        default: null
+    },
+
     isActive: {
         type: Boolean,
         default: true
     },
+
     accountStatus: {
         type: String,
-        enum: ['pending', 'active', 'rejected'],
+        enum: [ 'pending', 'active', 'rejected' ],
         default: 'pending',
         required: true
         },
