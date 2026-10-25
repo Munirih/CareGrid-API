@@ -11,6 +11,6 @@ router.post('/intake', authenticate, registerPatientIntake);
 router.get('/profile', authenticate, getPatientProfile);
 
 // Worker updates a patient's profile
-router.patch('/:patientId/profile', authenticate, updatePatientProfile);
+router.patch('/:patientId', authenticate, updatePatientProfile);
 
 module.exports = router;

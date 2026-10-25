@@ -40,31 +40,11 @@ const PatientSchema = new mongoose.Schema(
                 'prefer_not_to_say'
             ]
         },
-        assignedDoctorId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'User',
-            default: null
-        },
-        
-
-        facilityId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Facility',
-            default: null
-        },
 
         registeredBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
             default: null
-        },
-         
-        reasonForVisit: {
-            type: String,
-            required: true,
-            trim: true,
-            minlength: 3,
-            maxlength: 1000
         }
     },
     {

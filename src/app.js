@@ -7,6 +7,7 @@ const authRoutes = require("./routes/auth.routes")
 const patientRoutes = require("./routes/patient.routes")
 const validateEnv = require("./config/validateEnv")
 const facilityRoutes = require("./routes/facility.routes")
+const appointmentRoutes = require('./routes/appointment.routes');
 
 
 validateEnv();
@@ -22,6 +23,7 @@ app.use(RequestLogger);
 app.use('/api/auth', authRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/facilities', facilityRoutes);
+app.use('/api/appointments', appointmentRoutes);
 
 app.get('/health', (req, res) => {
     res.status(200).json({
