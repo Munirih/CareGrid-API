@@ -1,37 +1,10 @@
 
 const mongoose = require('mongoose');
 const calculateAge = require('../utils/calculateAge');
-const PatientModel = require('../models/patient.model');
-const UserModel = require('../models/user.model');
+const Patient = require('../models/patient.model');
+const User = require('../models/user.model');
 
-const allowedGenders = [
-    'female',
-    'male',
-    'other',
-    'prefer_not_to_say'
-];
-
-// Validate a date in YYYY-MM-DD format.
-// The date cannot be in the future.
-const isValidDateOfBirth = (dateOfBirth) => {
-    if (typeof dateOfBirth !== 'string') {
-        return false;
-    }
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
-        return false;
-    }
-
-    const date = new Date(`${dateOfBirth}T00:00:00.000Z`);
-
-    return (
-        !Number.isNaN(date.getTime()) &&
-        date.toISOString().slice(0, 10) === dateOfBirth &&
-        date <= new Date()
-    );
-};
-
-// Format a patient profile consistently in API responses.
+// Format patient data consistently.
 const formatPatient = (patient) => ({
     _id: patient._id,
     userId: patient.userId,
@@ -46,127 +19,99 @@ const formatPatient = (patient) => ({
     registeredBy: patient.registeredBy ?? null
 });
 
+// Check that the logged-in user is an active PHC worker.
+const getActiveWorker = async (userId) => {
+    const worker = await User.findById(userId);
 
-// 1. PHC worker registers a patient profile.
-const registerPatientIntake = async (req, res, next) => {
+    if (
+        !worker ||
+        worker.role !== 'worker' ||
+        !worker.isActive ||
+        worker.accountStatus !== 'active'
+    ) {
+        return null;
+    }
+
+    return worker;
+};
+
+// 1. Register or update a patient profile.
+const registerPatientProfile = async (req, res, next) => {
     try {
-        const worker = await UserModel.findById(req.user.userId);
+        const worker = await getActiveWorker(req.user.userId);
 
-        if (
-            !worker ||
-            !worker.isActive ||
-            worker.accountStatus !== 'active'
-        ) {
+        if (!worker) {
             return res.status(403).json({
-                message: 'Worker account is not active'
-            });
-        }
-
-        if (worker.role !== 'worker') {
-            return res.status(403).json({
-                message: 'Only PHC workers can register patients'
+                message: 'Only active PHC workers can register patients'
             });
         }
 
         const { patientUserId, dateOfBirth, gender } = req.body;
 
-        // Validate the existing patient account ID.
-        if (!mongoose.isValidObjectId(patientUserId)) {
-            return res.status(400).json({
-                message: 'Please provide a valid patient account ID'
-            });
-        }
-
-        // Confirm that the account belongs to an active patient.
-        const patientUser = await UserModel.findOne({
+        const patientUser = await User.findOne({
             _id: patientUserId,
             role: 'patient',
-            isActive: true
+            isActive: true,
+            accountStatus: 'active'
         });
 
         if (!patientUser) {
-            return res.status(400).json({
-                message: 'Patient account not found or inactive'
+            return res.status(404).json({
+                message: 'Active patient account not found'
             });
         }
 
-        // Validate optional date of birth.
-        if (
-            dateOfBirth !== undefined &&
-            dateOfBirth !== null &&
-            dateOfBirth !== '' &&
-            !isValidDateOfBirth(dateOfBirth)
-        ) {
-            return res.status(400).json({
-                message: 'Please provide a valid date of birth in YYYY-MM-DD format'
-            });
-        }
-
-        // Validate optional gender.
-        if (
-            gender !== undefined &&
-            gender !== null &&
-            !allowedGenders.includes(gender)
-        ) {
-            return res.status(400).json({
-                message: 'Please provide a valid gender'
-            });
-        }
-
-        // Check whether this patient already has a profile.
-        let patient = await PatientModel.findOne({
+        let patient = await Patient.findOne({
             userId: patientUser._id
         });
 
-        const profileAlreadyExists = Boolean(patient);
+        const profileExists = Boolean(patient);
 
-        if (patient) {
-            // Update the existing profile without erasing
-            // information that was not provided.
-            patient.fullName = patientUser.fullName;
-            patient.registeredBy = worker._id;
-
-            if (
-                dateOfBirth !== undefined &&
-                dateOfBirth !== null &&
-                dateOfBirth !== ''
-            ) {
-                patient.dateOfBirth = new Date(
-                    `${dateOfBirth}T00:00:00.000Z`
-                );
-            }
-
-            if (gender !== undefined && gender !== null) {
-                patient.gender = gender;
-            }
-
-            await patient.save();
-        } else {
-            // Create a profile without assigning a facility
-            // or doctor.
-            patient = await PatientModel.create({
+        if (!patient) {
+            patient = new Patient({
                 userId: patientUser._id,
                 fullName: patientUser.fullName,
-                dateOfBirth:
-                    dateOfBirth && dateOfBirth !== ''
-                        ? new Date(`${dateOfBirth}T00:00:00.000Z`)
-                        : null,
-                gender: gender || null,
                 registeredBy: worker._id
             });
         }
 
-        return res.status(profileAlreadyExists ? 200 : 201).json({
-            message: profileAlreadyExists
+        // Preserve existing values when optional fields are omitted.
+        patient.fullName = patientUser.fullName;
+        patient.registeredBy = worker._id;
+
+        if (
+            dateOfBirth !== undefined &&
+            dateOfBirth !== null &&
+            dateOfBirth !== ''
+        ) {
+            patient.dateOfBirth = new Date(
+                `${dateOfBirth}T00:00:00.000Z`
+            );
+        }
+
+        if (gender !== undefined && gender !== null) {
+            patient.gender = gender;
+        }
+
+        await patient.save();
+
+        return res.status(profileExists ? 200 : 201).json({
+            message: profileExists
                 ? 'Patient profile updated successfully'
                 : 'Patient profile registered successfully',
             patient: formatPatient(patient)
         });
     } catch (error) {
+        // Handle a race where two requests create the same profile.
+        if (error.code === 11000) {
+            return res.status(409).json({
+                message: 'A profile already exists for this patient'
+            });
+        }
+
         next(error);
     }
 };
-
 
 // 2. Patient views their own profile.
 const getPatientProfile = async (req, res, next) => {
@@ -177,15 +122,19 @@ const getPatientProfile = async (req, res, next) => {
             });
         }
 
-        const user = await UserModel.findById(req.user.userId);
+        const user = await User.findById(req.user.userId);
 
-        if (!user || !user.isActive) {
-            return res.status(401).json({
+        if (
+            !user ||
+            !user.isActive ||
+            user.accountStatus !== 'active'
+        ) {
+            return res.status(403).json({
                 message: 'Account unavailable'
             });
         }
 
-        const patient = await PatientModel.findOne({
+        const patient = await Patient.findOne({
             userId: user._id
         });
 
@@ -203,36 +152,18 @@ const getPatientProfile = async (req, res, next) => {
     }
 };
 
-
-// 3. Active PHC worker updates a patient's basic profile.
+// 3. PHC worker updates a patient's profile.
 const updatePatientProfile = async (req, res, next) => {
     try {
-        const worker = await UserModel.findById(req.user.userId);
+        const worker = await getActiveWorker(req.user.userId);
 
-        if (
-            !worker ||
-            !worker.isActive ||
-            worker.accountStatus !== 'active'
-        ) {
+        if (!worker) {
             return res.status(403).json({
-                message: 'Worker account is not active'
+                message: 'Only active PHC workers can update patient profiles'
             });
         }
 
-        if (worker.role !== 'worker') {
-            return res.status(403).json({
-                message: 'Only PHC workers can update patient profiles'
-            });
-        }
-
-        // Validate the patient profile ID in the URL.
-        if (!mongoose.isValidObjectId(req.params.patientId)) {
-            return res.status(400).json({
-                message: 'Please provide a valid patient ID'
-            });
-        }
-
-        const patient = await PatientModel.findById(
+        const patient = await Patient.findById(
             req.params.patientId
         );
 
@@ -244,48 +175,14 @@ const updatePatientProfile = async (req, res, next) => {
 
         const { dateOfBirth, gender } = req.body;
 
-        // Ensure at least one field was supplied.
-        if (
-            dateOfBirth === undefined &&
-            gender === undefined
-        ) {
-            return res.status(400).json({
-                message: 'Provide at least one field to update'
-            });
-        }
-
-        // Update date of birth only when supplied.
         if (dateOfBirth !== undefined) {
-            if (
-                dateOfBirth === null ||
-                dateOfBirth === ''
-            ) {
-                patient.dateOfBirth = null;
-            } else {
-                if (!isValidDateOfBirth(dateOfBirth)) {
-                    return res.status(400).json({
-                        message: 'Please provide a valid date of birth in YYYY-MM-DD format'
-                    });
-                }
-
-                patient.dateOfBirth = new Date(
-                    `${dateOfBirth}T00:00:00.000Z`
-                );
-            }
+            patient.dateOfBirth =
+                dateOfBirth === null || dateOfBirth === ''
+                    ? null
+                    : new Date(`${dateOfBirth}T00:00:00.000Z`);
         }
 
-        // Update gender only when supplied.
         if (gender !== undefined) {
-            if (
-                gender !== null &&
-                gender !== '' &&
-                !allowedGenders.includes(gender)
-            ) {
-                return res.status(400).json({
-                    message: 'Invalid gender value'
-                });
-            }
-
             patient.gender = gender || null;
         }
 
@@ -300,9 +197,40 @@ const updatePatientProfile = async (req, res, next) => {
     }
 };
 
+// 4. PHC worker views the patient list.
+const getAllPatients = async (req, res, next) => {
+    try {
+        const worker = await getActiveWorker(req.user.userId);
+
+        if (!worker) {
+            return res.status(403).json({
+                message: 'Only active PHC workers can view all patients'
+            });
+        }
+
+        const patients = await Patient.find()
+            .sort({ createdAt: -1 })
+            .select(
+                '_id userId fullName dateOfBirth gender registeredBy createdAt'
+            );
+
+        const patientList = patients.map(patient => ({
+            ...formatPatient(patient),
+            createdAt: patient.createdAt
+        }));
+
+        return res.status(200).json({
+            count: patientList.length,
+            patients: patientList
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
 module.exports = {
-    registerPatientIntake,
+    registerPatientProfile,
     getPatientProfile,
-    updatePatientProfile
+    updatePatientProfile,
+    getAllPatients
 };

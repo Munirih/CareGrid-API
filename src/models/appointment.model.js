@@ -3,18 +3,28 @@ const mongoose = require('mongoose');
 
 const AppointmentSchema = new mongoose.Schema(
     {
+        // The patient attending the appointment.
         patientId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Patient',
             required: true
         },
 
+        // The clinical intake associated with this visit.
+        intakeId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Intake',
+            required: true
+        },
+
+        // The doctor assigned to the appointment.
         doctorId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
             required: true
         },
 
+        // The facility where the appointment will take place.
         facilityId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Facility',
@@ -34,6 +44,14 @@ const AppointmentSchema = new mongoose.Schema(
             maxlength: 500
         },
 
+        complaint: {
+            type: String,
+            required: true,
+            trim: true,
+            minlength: 3,
+            maxlength: 2000
+        },
+
         status: {
             type: String,
             enum: [
@@ -46,6 +64,7 @@ const AppointmentSchema = new mongoose.Schema(
             default: 'scheduled'
         },
 
+        // The worker who created the appointment.
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
@@ -57,13 +76,12 @@ const AppointmentSchema = new mongoose.Schema(
     }
 );
 
-// Make it easier to find a patient's appointments.
+// Help retrieve appointments by patient and doctor.
 AppointmentSchema.index({
     patientId: 1,
     scheduledAt: 1
 });
 
-// Make it easier to find a doctor's appointments.
 AppointmentSchema.index({
     doctorId: 1,
     scheduledAt: 1

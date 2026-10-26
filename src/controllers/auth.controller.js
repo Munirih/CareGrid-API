@@ -31,7 +31,7 @@ const registerUser = async (req, res, next) => {
             })
         }
         const hashed = await hashPassword(password)
-        const accountStatus = role === 'patient' ? 'active' : 'pending';
+        const accountStatus = 'active'
 
         const user = new UserModel({
         fullName: fullName.trim(),
