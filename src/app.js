@@ -9,6 +9,9 @@ const validateEnv = require("./config/validateEnv")
 const facilityRoutes = require("./routes/facility.routes")
 const intakeRoutes = require('./routes/intake.routes');
 const appointmentRoutes = require('./routes/appointment.routes');
+const labRoutes = require('./routes/labReport.routes');
+
+
 
 
 
@@ -27,6 +30,7 @@ app.use('/api/patients', patientRoutes);
 app.use('/api/facilities', facilityRoutes);
 app.use('/api/intakes', intakeRoutes);
 app.use('/api/appointments', appointmentRoutes);
+app.use('/api/lab', labRoutes);
 
 
 app.get('/health', (req, res) => {
