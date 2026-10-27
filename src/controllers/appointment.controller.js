@@ -285,6 +285,9 @@ const getAppointmentDetails = async (req, res) => {
             .populate('facilityId', 'name')
             .populate('createdBy', 'fullName');
 
+        console.log('Requested appointment ID:', req.params.appointmentId);
+        console.log('Appointment found:', !!appointment);
+
         if (!appointment) {
             return res.status(404).json({
                 message: 'Appointment not found'

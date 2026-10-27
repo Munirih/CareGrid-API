@@ -9,8 +9,9 @@ const { validateCreateIntake } = require('../validations/intake.validation');
 const { createIntake } = require('../controllers/intake.controller');
 
 const router = express.Router();
+router.use(authenticate)
 
-router.post('/', authenticate, validateCreateIntake, createIntake);
+router.post('/', validateCreateIntake, createIntake);
 
 module.exports = router;
 
