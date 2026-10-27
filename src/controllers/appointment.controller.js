@@ -204,4 +204,138 @@ const getDoctorAppointments = async (req, res) => {
     }
 };
 
-module.exports = { createAppointment, getDoctorAppointments };
+
+const updateAppointmentStatus = async (req, res) => {
+    try {
+        const doctor = await User.findById(req.user.userId);
+
+        if (
+            !doctor ||
+            doctor.role !== 'doctor' ||
+            !doctor.isActive ||
+            doctor.accountStatus !== 'active'
+        ) {
+            return res.status(403).json({
+                message: 'Only active doctors can update appointments'
+            });
+        }
+
+        const appointment = await Appointment.findOne({
+            _id: req.params.appointmentId,
+            doctorId: doctor._id
+        });
+
+        if (!appointment) {
+            return res.status(404).json({
+                message: 'Appointment not found'
+            });
+        }
+
+        appointment.status = req.body.status;
+        await appointment.save();
+
+        return res.status(200).json({
+            message: 'Appointment status updated successfully',
+            appointment: {
+                _id: appointment._id,
+                status: appointment.status
+            }
+        });
+
+    } catch (error) {
+        console.error('Update appointment status error:', error);
+
+        return res.status(500).json({
+            message: 'Failed to update appointment status'
+        });
+    }
+};
+
+
+
+const getAppointmentDetails = async (req, res) => {
+    try {
+        // 1. Verify the logged-in doctor
+        const doctor = await User.findById(req.user.userId);
+
+        if (
+            !doctor ||
+            doctor.role !== 'doctor' ||
+            !doctor.isActive ||
+            doctor.accountStatus !== 'active'
+        ) {
+            return res.status(403).json({
+                message: 'Only active doctors can view appointment details'
+            });
+        }
+
+        // 2. Find an appointment assigned to this doctor
+        const appointment = await Appointment.findOne({
+            _id: req.params.appointmentId,
+            doctorId: doctor._id
+        })
+            .populate({
+                path: 'patientId',
+                select: 'fullName dateOfBirth gender'
+            })
+            .populate({
+                path: 'intakeId',
+                select: 'clinicalSymptoms bloodPressure temperature notes createdAt'
+            })
+            .populate('facilityId', 'name')
+            .populate('createdBy', 'fullName');
+
+        if (!appointment) {
+            return res.status(404).json({
+                message: 'Appointment not found'
+            });
+        }
+
+        // 3. Return the appointment and relevant clinical information
+        return res.status(200).json({
+            message: 'Appointment details retrieved successfully',
+            appointment: {
+                _id: appointment._id,
+                patient: appointment.patientId ? {
+                    fullName: appointment.patientId.fullName,
+                    age: appointment.patientId.dateOfBirth
+                        ? calculateAge(appointment.patientId.dateOfBirth)
+                        : null,
+                    gender: appointment.patientId.gender
+                } : null,
+
+                intake: appointment.intakeId ? {
+                    clinicalSymptoms: appointment.intakeId.clinicalSymptoms,
+                    bloodPressure: appointment.intakeId.bloodPressure,
+                    temperature: appointment.intakeId.temperature,
+                    notes: appointment.intakeId.notes,
+                    recordedAt: appointment.intakeId.createdAt
+                } : null,
+
+                facilityName: appointment.facilityId?.name,
+                workerName: appointment.createdBy?.fullName,
+                complaint: appointment.complaint,
+                reasonForVisit: appointment.reasonForVisit,
+                scheduledAt: appointment.scheduledAt,
+                status: appointment.status,
+                createdAt: appointment.createdAt
+            }
+        });
+
+    } catch (error) {
+        console.error('Get appointment details error:', error);
+
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                message: 'Invalid appointment ID'
+            });
+        }
+
+        return res.status(500).json({
+            message: 'Failed to retrieve appointment details'
+        });
+    }
+};
+
+
+module.exports = { createAppointment, getDoctorAppointments, updateAppointmentStatus, getAppointmentDetails };

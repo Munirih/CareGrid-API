@@ -82,7 +82,27 @@ const validateDoctorAppointments = (req, res, next) => {
 };
 
 
+const validateUpdateAppointmentStatus = (req, res, next) => {
+    const { status } = req.body;
+
+    const allowedStatuses = [
+        'confirmed',
+        'completed',
+        'cancelled',
+        'no_show'
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({
+            message: 'Invalid appointment status'
+        });
+    }
+
+    next();
+};
+
 module.exports = {
     validateCreateAppointment,
-    validateDoctorAppointments
+    validateDoctorAppointments,
+    validateUpdateAppointmentStatus
 };
