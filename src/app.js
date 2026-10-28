@@ -6,7 +6,14 @@ const errorHandler = require("./middlewares/errorHandler")
 const authRoutes = require("./routes/auth.routes")
 const patientRoutes = require("./routes/patient.routes")
 const validateEnv = require("./config/validateEnv")
-const testRoutes = require("./routes/test.routes")
+const facilityRoutes = require("./routes/facility.routes")
+const intakeRoutes = require('./routes/intake.routes');
+const appointmentRoutes = require('./routes/appointment.routes');
+const labRoutes = require('./routes/labReport.routes');
+const consultationRoutes = require('./routes/consultation.routes');
+
+
+
 
 validateEnv();
 
@@ -20,6 +27,12 @@ app.use(RequestLogger);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/patients', patientRoutes);
+app.use('/api/facilities', facilityRoutes);
+app.use('/api/intakes', intakeRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/lab', labRoutes);
+app.use('/api/consultations', consultationRoutes);
+
 
 app.get('/health', (req, res) => {
     res.status(200).json({
@@ -28,7 +41,6 @@ app.get('/health', (req, res) => {
     });
 });
 
-app.use('/api/test', testRoutes);
 
 
 app.use(errorHandler);

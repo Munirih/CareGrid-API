@@ -1,46 +1,57 @@
 const mongoose = require('mongoose');
 
-// Define the structure of a healthcare facility
 const facilitySchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: true,
-        trim: true,
-        maxlength: 150
-    },
+name: {
+type: String,
+required: true,
+trim: true,
+maxlength: 150
+},
 
-    type: {
-        type: String,
-        enum: ['PHC', 'hospital', 'specialist_centre', 'laboratory'],
-        required: true
-    },
+facilityType: {
+    type: String,
+    enum: ['PHC', 'Hospital', 'Specialist Centre', 'Laboratory', 'Other'],
+    required: true
+},
 
-    address: {
-        type: String,
-        required: true,
-        trim: true,
-        maxlength: 300
-    },
+address: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 300
+},
 
-    state: {
-        type: String,
-        required: true,
-        trim: true
-    },
+city: {
+    type: String,
+    trim: true,
+    maxlength: 100
+},
 
-    phoneNumber: {
-        type: String,
-        trim: true
-    },
+state: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 100
+},
 
-    isActive: {
-        type: Boolean,
-        default: true
-    }
+country: {
+    type: String,
+    trim: true,
+    maxlength: 100,
+    default: 'Nigeria'
+},
+
+phoneNumber: {
+    type: String,
+    trim: true
+},
+
+isActive: {
+    type: Boolean,
+    default: true
+}
+
+
 }, { timestamps: true });
 
-// Create and export the Facility model
-const Facility = mongoose.model('Facility', facilitySchema);
-
-module.exports = Facility;
-
+module.exports = mongoose.model('Facility', facilitySchema);

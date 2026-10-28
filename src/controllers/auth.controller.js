@@ -10,12 +10,13 @@ const responseUser = (user) => ({
     fullName: user.fullName,
     phoneNumber: user.phoneNumber,
     role: user.role,
+    facilityId: user.facilityId,
     accountStatus: user.accountStatus
 });
 
 const registerUser = async (req, res, next) => {
     try {
-        const { fullName, email, phoneNumber, password, role } = req.body
+        const { fullName, email, phoneNumber, password, role, facilityId } = req.body
 
         const existingUser = await UserModel.findOne({ 
             $or: [
@@ -30,7 +31,7 @@ const registerUser = async (req, res, next) => {
             })
         }
         const hashed = await hashPassword(password)
-        const accountStatus = role === 'patient' ? 'active' : 'pending';
+        const accountStatus = 'active'
 
         const user = new UserModel({
         fullName: fullName.trim(),
@@ -39,6 +40,7 @@ const registerUser = async (req, res, next) => {
         password: hashed, 
         role: role,
         accountStatus: accountStatus,
+        facilityId: ['doctor', 'worker'].includes(role) ? facilityId : null,
         isActive: true
 
     })
