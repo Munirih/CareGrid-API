@@ -1,7 +1,7 @@
 const express = require('express');
 const authenticate = require('../middlewares/auth.middleware');
 const { validateRegisterPatient, validateUpdatePatient } = require('../validations/patient.validation');
-const { registerPatientProfile, getPatientProfile, updatePatientProfile, getAllPatients } = require('../controllers/patient.controller');
+const { registerPatientProfile, getPatientProfile, updatePatientProfile, getAllPatients, searchPatientAccounts } = require('../controllers/patient.controller');
 
 
 
@@ -19,5 +19,7 @@ router.patch('/:patientId', validateUpdatePatient, updatePatientProfile);
 
 // Worker gets the list of all patients
 router.get('/', getAllPatients);
+
+router.get('/search', searchPatientAccounts);
 
 module.exports = router;

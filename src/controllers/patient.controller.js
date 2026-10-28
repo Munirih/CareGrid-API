@@ -228,9 +228,72 @@ const getAllPatients = async (req, res, next) => {
     }
 };
 
+// Search for existing patient accounts.
+const searchPatientAccounts = async (req, res, next) => {
+    try {
+        // Check that the logged-in user is an active worker.
+        const worker = await User.findById(req.user.userId);
+
+        if (
+            !worker ||
+            worker.role !== 'worker' ||
+            !worker.isActive ||
+            worker.accountStatus !== 'active'
+        ) {
+            return res.status(403).json({
+                message: 'Only active PHC workers can search patients'
+            });
+        }
+
+        // Get the search term from the URL.
+        const name = req.query.q?.trim();
+
+        if (!name || name.length < 2) {
+            return res.status(400).json({
+                message: 'Enter at least 2 characters to search'
+            });
+        }
+
+        if (name.length > 100) {
+            return res.status(400).json({
+                message: 'Search term is too long'
+            });
+        }
+
+        // Escape special regex characters in the search term.
+        const safeSearch = name.replace(
+            /[.*+?^${}()|[\]\\]/g,
+            '\\$&'
+        );
+
+        // Search by name, email, or phone number.
+        const patients = await User.find({
+            role: 'patient',
+            isActive: true,
+            accountStatus: 'active',
+            $or: [
+                { fullName: { $regex: safeSearch, $options: 'i' } },
+                { email: { $regex: safeSearch, $options: 'i' } },
+                { phoneNumber: { $regex: safeSearch } }
+            ]
+        })
+            .select('_id fullName email phoneNumber')
+            .limit(10);
+
+        return res.status(200).json({
+            count: patients.length,
+            patients
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+
 module.exports = {
     registerPatientProfile,
     getPatientProfile,
     updatePatientProfile,
-    getAllPatients
+    getAllPatients,
+    searchPatientAccounts
 };
