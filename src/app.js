@@ -10,7 +10,7 @@ const facilityRoutes = require("./routes/facility.routes")
 const intakeRoutes = require('./routes/intake.routes');
 const appointmentRoutes = require('./routes/appointment.routes');
 const labRoutes = require('./routes/labReport.routes');
-
+const consultationRoutes = require('./routes/consultation.routes');
 
 
 
@@ -31,6 +31,7 @@ app.use('/api/facilities', facilityRoutes);
 app.use('/api/intakes', intakeRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/lab', labRoutes);
+app.use('/api/consultations', consultationRoutes);
 
 
 app.get('/health', (req, res) => {
