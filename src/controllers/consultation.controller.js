@@ -1,12 +1,40 @@
-
 const User = require('../models/user.model');
+const Patient = require('../models/patient.model');
 const Appointment = require('../models/appointment.model');
 const Consultation = require('../models/consultation.model');
 
-// Create a consultation for an existing appointment.
+// Patients request consultations by describing their symptoms.
+const requestConsultation = async (req, res, next) => {
+    try {
+        const patient = await Patient.findOne({
+            userId: req.user.userId
+        });
+
+        if (!patient) {
+            return res.status(404).json({
+                message: 'Patient profile not found'
+            });
+        }
+
+        const consultation = await Consultation.create({
+            patientId: patient._id,
+            symptoms: req.body.symptoms,
+            appointmentId: req.body.appointmentId || null,
+            status: 'requested'
+        });
+
+        return res.status(201).json({
+            message: 'Consultation requested successfully',
+            consultation
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Doctors record clinical consultations for their appointments.
 const createConsultation = async (req, res, next) => {
     try {
-        // 1. Check that the logged-in doctor is active.
         const doctor = await User.findById(req.user.userId);
 
         if (
@@ -28,10 +56,7 @@ const createConsultation = async (req, res, next) => {
             followUpDate
         } = req.body;
 
-        // 2. Find the existing appointment.
-        const appointment = await Appointment.findById(
-            appointmentId
-        );
+        const appointment = await Appointment.findById(appointmentId);
 
         if (!appointment) {
             return res.status(404).json({
@@ -39,26 +64,21 @@ const createConsultation = async (req, res, next) => {
             });
         }
 
-        // 3. Ensure this appointment belongs to the doctor.
-        if (
-            appointment.doctorId.toString() !==
-            doctor._id.toString()
-        ) {
+        if (appointment.doctorId.toString() !== doctor._id.toString()) {
             return res.status(403).json({
                 message: 'You are not assigned to this appointment'
             });
         }
 
-        // 4. Only allow consultations for confirmed appointments.
         if (appointment.status !== 'confirmed') {
             return res.status(400).json({
                 message: 'Appointment must be confirmed first'
             });
         }
 
-        // 5. Prevent a duplicate consultation.
-        const existingConsultation =
-            await Consultation.findOne({ appointmentId });
+        const existingConsultation = await Consultation.findOne({
+            appointmentId
+        });
 
         if (existingConsultation) {
             return res.status(409).json({
@@ -66,15 +86,16 @@ const createConsultation = async (req, res, next) => {
             });
         }
 
-        // 6. Create the consultation.
         const consultation = await Consultation.create({
             appointmentId: appointment._id,
             patientId: appointment.patientId,
             doctorId: doctor._id,
+            symptoms: req.body.symptoms || 'Not recorded',
             diagnosis,
             treatmentPlan,
             notes,
-            followUpDate
+            followUpDate,
+            status: 'completed'
         });
 
         return res.status(201).json({
@@ -87,5 +108,6 @@ const createConsultation = async (req, res, next) => {
 };
 
 module.exports = {
+    requestConsultation,
     createConsultation
 };
