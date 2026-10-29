@@ -1,15 +1,32 @@
 const express = require('express');
-
-const { createConsultation } = require('../controllers/consultation.controller');
-
-const { validateCreateConsultation } = require('../validations/consultation.validation');
-
-const authenticate = require('../middlewares/auth.middleware');
-
 const router = express.Router();
 
-router.use(authenticate)
+const authenticate = require('../middlewares/auth.middleware');
+const authorize = require('../middlewares/role.middleware');
 
-router.post('/', validateCreateConsultation, createConsultation);
+const {
+    requestConsultation,
+    createConsultation
+} = require('../controllers/consultation.controller');
+
+const {
+    validateCreateConsultation
+} = require('../validations/consultation.validation');
+
+router.use(authenticate);
+
+router.post(
+    '/request',
+    authorize('patient'),
+    validateCreateConsultation,
+    requestConsultation
+);
+
+router.post(
+    '/',
+    authorize('doctor'),
+    validateCreateConsultation,
+    createConsultation
+);
 
 module.exports = router;
