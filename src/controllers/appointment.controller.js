@@ -1,4 +1,3 @@
-
 const User = require('../models/user.model');
 const Patient = require('../models/patient.model');
 const Facility = require('../models/facility.model');
@@ -6,12 +5,13 @@ const Intake = require('../models/intake.model');
 const Appointment = require('../models/appointment.model');
 const calculateAge = require('../utils/calculateAge');
 
-const createAppointment = async (req, res) => {
+// PHC workers book appointments for patients.
+const createAppointment = async (req, res, next) => {
     try {
-        // 1. Find the logged-in worker
         const worker = await User.findById(req.user.userId);
 
-        if (!worker ||
+        if (
+            !worker ||
             worker.role !== 'worker' ||
             !worker.isActive ||
             worker.accountStatus !== 'active'
@@ -28,10 +28,9 @@ const createAppointment = async (req, res) => {
             facilityId,
             scheduledAt,
             reasonForVisit,
-            complaint,
+            complaint
         } = req.body;
 
-        // 2. Check that the patient exists
         const patient = await Patient.findById(patientId);
 
         if (!patient) {
@@ -40,7 +39,6 @@ const createAppointment = async (req, res) => {
             });
         }
 
-        // 3. Check that the intake exists
         const intake = await Intake.findById(intakeId);
 
         if (!intake) {
@@ -49,14 +47,12 @@ const createAppointment = async (req, res) => {
             });
         }
 
-        // Ensure the intake belongs to this patient
         if (intake.patientId.toString() !== patientId) {
             return res.status(400).json({
                 message: 'This intake does not belong to the selected patient'
             });
         }
 
-        // 4. Check that the facility exists and is active
         const facility = await Facility.findById(facilityId);
 
         if (!facility || !facility.isActive) {
@@ -65,10 +61,10 @@ const createAppointment = async (req, res) => {
             });
         }
 
-        // Ensure the worker and intake belong to this facility
         if (
             !worker.facilityId ||
             worker.facilityId.toString() !== facilityId ||
+            !intake.facilityId ||
             intake.facilityId.toString() !== facilityId
         ) {
             return res.status(403).json({
@@ -76,7 +72,6 @@ const createAppointment = async (req, res) => {
             });
         }
 
-        // 5. Check that the assigned doctor is active
         const doctor = await User.findById(doctorId);
 
         if (
@@ -90,7 +85,6 @@ const createAppointment = async (req, res) => {
             });
         }
 
-        // Ensure the doctor works at the selected facility
         if (
             !doctor.facilityId ||
             doctor.facilityId.toString() !== facilityId
@@ -100,19 +94,29 @@ const createAppointment = async (req, res) => {
             });
         }
 
-        // 6. Create the appointment
+        const appointmentDate = new Date(scheduledAt);
+
+        if (
+            !scheduledAt ||
+            Number.isNaN(appointmentDate.getTime()) ||
+            appointmentDate <= new Date()
+        ) {
+            return res.status(400).json({
+                message: 'Appointment date must be in the future'
+            });
+        }
+
         const appointment = await Appointment.create({
             patientId,
             intakeId,
             doctorId,
             facilityId,
-            scheduledAt,
+            scheduledAt: appointmentDate,
             reasonForVisit,
             complaint,
             createdBy: worker._id
         });
 
-        // Fetch the appointment with the related names.
         const populatedAppointment = await Appointment.findById(
             appointment._id
         )
@@ -123,32 +127,16 @@ const createAppointment = async (req, res) => {
 
         return res.status(201).json({
             message: 'Appointment booked successfully',
-            appointment: {
-                _id: populatedAppointment._id,
-                patientName: populatedAppointment.patientId.fullName,
-                workerName: populatedAppointment.createdBy.fullName,
-                doctorName: populatedAppointment.doctorId.fullName,
-                facilityName: populatedAppointment.facilityId.name,
-                complaint: populatedAppointment.complaint,
-                reasonForVisit: populatedAppointment.reasonForVisit,
-                scheduledAt: populatedAppointment.scheduledAt,
-                status: populatedAppointment.status,
-                createdAt: populatedAppointment.createdAt
-            }
+            appointment: populatedAppointment
         });
-
     } catch (error) {
-        console.error('Create appointment error:', error);
-
-        return res.status(500).json({
-            message: 'Failed to book appointment'
-        });
+        next(error);
     }
 };
 
-const getDoctorAppointments = async (req, res) => {
+// Doctors view their assigned appointments.
+const getDoctorAppointments = async (req, res, next) => {
     try {
-        // 1. Find the logged-in doctor
         const doctor = await User.findById(req.user.userId);
 
         if (
@@ -162,7 +150,6 @@ const getDoctorAppointments = async (req, res) => {
             });
         }
 
-        // 2. Find appointments assigned to this doctor
         const appointments = await Appointment.find({
             doctorId: doctor._id
         })
@@ -171,20 +158,15 @@ const getDoctorAppointments = async (req, res) => {
             .populate('facilityId', 'name')
             .sort({ scheduledAt: 1 });
 
-        // 3. Return appointments with patient age
         return res.status(200).json({
             message: 'Doctor appointments retrieved successfully',
             count: appointments.length,
-
             appointments: appointments.map(appointment => ({
                 _id: appointment._id,
-
                 patientName: appointment.patientId?.fullName,
-
                 patientAge: appointment.patientId?.dateOfBirth
                     ? calculateAge(appointment.patientId.dateOfBirth)
                     : null,
-
                 workerName: appointment.createdBy?.fullName,
                 facilityName: appointment.facilityId?.name,
                 complaint: appointment.complaint,
@@ -194,18 +176,13 @@ const getDoctorAppointments = async (req, res) => {
                 createdAt: appointment.createdAt
             }))
         });
-
     } catch (error) {
-        console.error('Get doctor appointments error:', error);
-
-        return res.status(500).json({
-            message: 'Failed to retrieve doctor appointments'
-        });
+        next(error);
     }
 };
 
-
-const updateAppointmentStatus = async (req, res) => {
+// Doctors update the status of appointments assigned to them.
+const updateAppointmentStatus = async (req, res, next) => {
     try {
         const doctor = await User.findById(req.user.userId);
 
@@ -231,31 +208,35 @@ const updateAppointmentStatus = async (req, res) => {
             });
         }
 
+        const allowedStatuses = [
+            'scheduled',
+            'confirmed',
+            'completed',
+            'cancelled',
+            'no_show'
+        ];
+
+        if (!allowedStatuses.includes(req.body.status)) {
+            return res.status(400).json({
+                message: 'Invalid appointment status'
+            });
+        }
+
         appointment.status = req.body.status;
         await appointment.save();
 
         return res.status(200).json({
             message: 'Appointment status updated successfully',
-            appointment: {
-                _id: appointment._id,
-                status: appointment.status
-            }
+            appointment
         });
-
     } catch (error) {
-        console.error('Update appointment status error:', error);
-
-        return res.status(500).json({
-            message: 'Failed to update appointment status'
-        });
+        next(error);
     }
 };
 
-
-
-const getAppointmentDetails = async (req, res) => {
+// Doctors view details of their assigned appointments.
+const getAppointmentDetails = async (req, res, next) => {
     try {
-        // 1. Verify the logged-in doctor
         const doctor = await User.findById(req.user.userId);
 
         if (
@@ -269,24 +250,17 @@ const getAppointmentDetails = async (req, res) => {
             });
         }
 
-        // 2. Find an appointment assigned to this doctor
         const appointment = await Appointment.findOne({
             _id: req.params.appointmentId,
             doctorId: doctor._id
         })
-            .populate({
-                path: 'patientId',
-                select: 'fullName dateOfBirth gender'
-            })
-            .populate({
-                path: 'intakeId',
-                select: 'clinicalSymptoms bloodPressure temperature notes createdAt'
-            })
+            .populate('patientId', 'fullName dateOfBirth gender')
+            .populate(
+                'intakeId',
+                'clinicalSymptoms bloodPressure temperature notes createdAt'
+            )
             .populate('facilityId', 'name')
             .populate('createdBy', 'fullName');
-
-        console.log('Requested appointment ID:', req.params.appointmentId);
-        console.log('Appointment found:', !!appointment);
 
         if (!appointment) {
             return res.status(404).json({
@@ -294,27 +268,28 @@ const getAppointmentDetails = async (req, res) => {
             });
         }
 
-        // 3. Return the appointment and relevant clinical information
         return res.status(200).json({
             message: 'Appointment details retrieved successfully',
             appointment: {
                 _id: appointment._id,
-                patient: appointment.patientId ? {
-                    fullName: appointment.patientId.fullName,
-                    age: appointment.patientId.dateOfBirth
-                        ? calculateAge(appointment.patientId.dateOfBirth)
-                        : null,
-                    gender: appointment.patientId.gender
-                } : null,
-
-                intake: appointment.intakeId ? {
-                    clinicalSymptoms: appointment.intakeId.clinicalSymptoms,
-                    bloodPressure: appointment.intakeId.bloodPressure,
-                    temperature: appointment.intakeId.temperature,
-                    notes: appointment.intakeId.notes,
-                    recordedAt: appointment.intakeId.createdAt
-                } : null,
-
+                patient: appointment.patientId
+                    ? {
+                        fullName: appointment.patientId.fullName,
+                        age: appointment.patientId.dateOfBirth
+                            ? calculateAge(appointment.patientId.dateOfBirth)
+                            : null,
+                        gender: appointment.patientId.gender
+                    }
+                    : null,
+                intake: appointment.intakeId
+                    ? {
+                        clinicalSymptoms: appointment.intakeId.clinicalSymptoms,
+                        bloodPressure: appointment.intakeId.bloodPressure,
+                        temperature: appointment.intakeId.temperature,
+                        notes: appointment.intakeId.notes,
+                        recordedAt: appointment.intakeId.createdAt
+                    }
+                    : null,
                 facilityName: appointment.facilityId?.name,
                 workerName: appointment.createdBy?.fullName,
                 complaint: appointment.complaint,
@@ -324,21 +299,20 @@ const getAppointmentDetails = async (req, res) => {
                 createdAt: appointment.createdAt
             }
         });
-
     } catch (error) {
-        console.error('Get appointment details error:', error);
-
         if (error.name === 'CastError') {
             return res.status(400).json({
                 message: 'Invalid appointment ID'
             });
         }
 
-        return res.status(500).json({
-            message: 'Failed to retrieve appointment details'
-        });
+        next(error);
     }
 };
 
-
-module.exports = { createAppointment, getDoctorAppointments, updateAppointmentStatus, getAppointmentDetails };
+module.exports = {
+    createAppointment,
+    getDoctorAppointments,
+    updateAppointmentStatus,
+    getAppointmentDetails
+};

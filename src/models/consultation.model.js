@@ -1,15 +1,7 @@
-
 const mongoose = require('mongoose');
 
-const ConsultationSchema = new mongoose.Schema(
+const consultationSchema = new mongoose.Schema(
     {
-        appointmentId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Appointment',
-            required: true,
-            unique: true
-        },
-
         patientId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Patient',
@@ -19,30 +11,47 @@ const ConsultationSchema = new mongoose.Schema(
         doctorId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
-            required: true
+            default: null
+        },
+
+        appointmentId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Appointment',
+            default: null
+        },
+
+        symptoms: {
+            type: String,
+            required: true,
+            trim: true,
+            minlength: 2,
+            maxlength: 1000
         },
 
         diagnosis: {
             type: String,
-            required: true,
             trim: true,
-            minlength: 3,
+            default: '',
             maxlength: 2000
         },
 
         treatmentPlan: {
             type: String,
-            required: true,
             trim: true,
-            minlength: 3,
-            maxlength: 2000
+            default: '',
+            maxlength: 3000
         },
 
         notes: {
             type: String,
             trim: true,
-            maxlength: 3000,
-            default: ''
+            default: '',
+            maxlength: 3000
+        },
+
+        scheduledAt: {
+            type: Date,
+            default: null
         },
 
         followUpDate: {
@@ -52,8 +61,14 @@ const ConsultationSchema = new mongoose.Schema(
 
         status: {
             type: String,
-            enum: ['in_progress', 'completed'],
-            default: 'completed'
+            enum: [
+                'requested',
+                'scheduled',
+                'in_progress',
+                'completed',
+                'cancelled'
+            ],
+            default: 'requested'
         }
     },
     {
@@ -61,12 +76,9 @@ const ConsultationSchema = new mongoose.Schema(
     }
 );
 
-ConsultationSchema.index({
+consultationSchema.index({
     doctorId: 1,
     createdAt: -1
 });
 
-module.exports = mongoose.model(
-    'Consultation',
-    ConsultationSchema
-);
+module.exports = mongoose.model('Consultation', consultationSchema);

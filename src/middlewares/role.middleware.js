@@ -1,31 +1,27 @@
-
-const User = require('../models/user.model');
-
 const authorize = (...allowedRoles) => {
-    return async (req, res, next) => {
-        try {
-            const user = await User.findById(req.user.userId);
+return (req, res, next) => {
+// Authentication must run before role authorization
+if (!req.user || !req.user.userId) {
+return res.status(401).json({
+message: 'Authentication required'
+});
+}
 
-            if (!user || !user.isActive) {
-                return res.status(401).json({
-                    message: 'Account unavailable'
-                });
-            }
 
-            if (!allowedRoles.includes(user.role)) {
-                return res.status(403).json({
-                    message: 'You do not have permission to access this resource'
-                });
-            }
+    // Ensure at least one permitted role was specified
+    if (
+        allowedRoles.length === 0 ||
+        !allowedRoles.includes(req.user.role)
+    ) {
+        return res.status(403).json({
+            message: 'You do not have permission to access this resource'
+        });
+    }
 
-            req.user.role = user.role;
-            req.user.facilityId = user.facilityId;
+    next();
+};
 
-            next();
-        } catch (error) {
-            next(error);
-        }
-    };
+
 };
 
 module.exports = authorize;
